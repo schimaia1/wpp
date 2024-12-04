@@ -1,0 +1,5 @@
+[
+    { "username": "user1", "password": "senha123", "statusPagamento": "ok" },
+    { "username": "user2", "password": "senha456", "statusPagamento": "pendente" },
+    { "username": "user3", "password": "senha789", "statusPagamento": "ok" }
+]

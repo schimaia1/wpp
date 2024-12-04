@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Envio de Mensagens WhatsApp</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Lado esquerdo: Carregar mensagem e arquivo -->
+        <div class="left">
+            <h1>Escreva a mensagem que será enviada</h1>
+            <form id="sendMessagesForm">
+                <textarea id="message" rows="5" placeholder="Digite a mensagem"></textarea>
+                <input type="file" id="fileInput" accept=".txt">
+                <button type="submit">Enviar Mensagens</button>
+            </form>
+        </div>
+
+        <!-- Lado direito: Lista de contatos com status -->
+        <div class="right">
+            <h1>Mensagens Enviadas - 0 de 0</h1> <!-- Cabeçalho com total de mensagens enviadas -->
+            <div id="progressContainer">
+                <p id="progressText">Carregue um arquivo para exibir os contatos.</p>
+            </div>
+        
+            <!-- Novo contêiner para erros -->
+            <div id="errorContainer">
+                <p id="errorText" style="color: red; display: none;">Erros: 0</p> <!-- Mensagens de erro ocultas por padrão -->
+            </div>
+        
+            <!-- Exibição da lista de contatos -->
+            <div class="contact-list" id="contactList">
+                <!-- Contatos serão exibidos aqui -->
+            </div>
+        </div>
+        
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const form = document.getElementById("sendMessagesForm");
+        const messageInput = document.getElementById("message");
+        const fileInput = document.getElementById("fileInput");
+        const contactList = document.getElementById("contactList");
+        const socket = io(); // Conexão com o servidor
+      
+        let totalContacts = 0;
+        let totalSent = 0;
+        let totalSuccess = 0;
+        let totalError = 0;
+      
+        // Função para exibir a lista de contatos assim que o arquivo é carregado
+        fileInput.addEventListener('change', function (event) {
+            const file = event.target.files[0];
+
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function (e) {
+                    const numbers = e.target.result
+                        .split("\n")
+                        .map((line) => line.trim())
+                        .filter(Boolean);
+
+                    // Exibe a lista de contatos
+                    totalContacts = numbers.length;
+                    totalSent = 0; // Resetar o total enviado
+                    totalSuccess = 0; // Resetar os enviados com sucesso
+                    totalError = 0; // Resetar os erros
+                    updateContactHeader(totalContacts, totalSuccess, totalError);
+
+                    // Limpa a lista de contatos
+                    contactList.innerHTML = "";  
+
+                    // Adiciona os contatos na lista com status inicial
+                    numbers.forEach((number, index) => {
+                        const contactItem = document.createElement("div");
+                        contactItem.className = "contact-item";
+                        contactItem.dataset.index = index; // Armazena o índice para fácil identificação
+                        contactItem.innerHTML = `
+                            <span>${index + 1}. ${number}</span>
+                            <span class="status">Aguardando</span> <!-- Status inicial -->
+                        `;
+                        contactList.appendChild(contactItem);
+                    });
+
+                    // Inicia o envio de mensagens no servidor via socket
+                    socket.emit("start-sending-messages", numbers);
+                };
+                reader.readAsText(file);
+            }
+        });
+
+        // Função para enviar as mensagens
+        form.addEventListener("submit", async (event) => {
+            event.preventDefault();
+
+            const message = messageInput.value.trim();
+            const file = fileInput.files[0];
+
+            if (!message || !file) {
+                alert("Por favor, insira uma mensagem e carregue um arquivo de números.");
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                const numbers = e.target.result
+                    .split("\n")
+                    .map((line) => line.trim())
+                    .filter(Boolean);
+
+                // Envia as mensagens ao servidor
+                fetch("/send-messages", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({ message, numbers }),
+                })
+                    .then((response) => response.json())
+                    .then((data) => {
+                        console.log("Mensagens enviadas:", data);
+                    })
+                    .catch((error) => {
+                        console.error("Erro ao enviar mensagens:", error);
+                        alert("Erro ao enviar as mensagens.");
+                    });
+            };
+
+            reader.readAsText(file);
+        });
+
+        // Atualiza o progresso via socket.io
+        socket.on("progress", function (data) {
+            const { index, totalContacts, status, message } = data;
+
+            // Localiza o contato correspondente pelo índice
+            const contactItem = document.querySelector(`.contact-item[data-index='${index}']`);
+            if (contactItem) {
+                const statusElement = contactItem.querySelector(".status");
+
+                if (status === "awaiting") {
+                    // Atualiza o status com a mensagem de aguardando
+                    statusElement.textContent = `Aguardando (${index + 1} de ${totalContacts})`;
+                    statusElement.className = "status";
+                } else if (status === "success") {
+                    // Atualiza para "Enviado com sucesso"
+                    statusElement.textContent = `Enviado com sucesso (${index + 1} de ${totalContacts})`;
+                    statusElement.className = "status success";
+                    totalSuccess++;  // Incrementa o número de mensagens enviadas com sucesso
+                    totalSent++;  // Incrementa o total de mensagens enviadas
+                    updateContactHeader(totalContacts, totalSuccess, totalError);  // Atualiza o progresso no título
+                } else if (status === "error") {
+                    // Atualiza para erro
+                    statusElement.textContent = `Erro no envio (${index + 1} de ${totalContacts})`;
+                    statusElement.className = "status error";
+                    totalError++;  // Incrementa o número de erros
+                    totalSent++;  // Incrementa o total de mensagens enviadas
+                    updateContactHeader(totalContacts, totalSuccess, totalError);  // Atualiza o progresso no título
+                }
+            }
+        });
+
+        // Função para atualizar o cabeçalho com o progresso e os erros
+function updateContactHeader(total, success, error) {
+    const header = document.querySelector(".right h1");
+    header.textContent = `Mensagens Enviadas - ${success} de ${total}`;
+
+    // Mostrar ou ocultar os erros
+    const errorText = document.getElementById("errorText");
+    if (error > 0) {
+        errorText.style.display = "block"; // Exibe os erros
+        errorText.textContent = `Erros: ${error}`; // Atualiza a quantidade de erros
+    } else {
+        errorText.style.display = "none"; // Oculta os erros caso não haja
+    }
+}
+
+    </script>
+</body>
+</html>

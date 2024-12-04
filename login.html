@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Página de Login</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="login-container">
+        <h2>Login</h2>
+        <form id="loginForm">
+            <div class="input-group">
+                <label for="username">Nome de usuário</label>
+                <input type="text" id="username" name="username" required>
+            </div>
+            <div class="input-group">
+                <label for="password">Senha</label>
+                <input type="password" id="password" name="password" required>
+            </div>
+            <button type="submit">Entrar</button>
+        </form>
+        <p id="loginError" style="color: red; display: none;">Usuário ou senha inválidos!</p>
+        <p id="paymentError" style="color: red; display: none;">Pagamento pendente. Regularize para acessar.</p>
+    </div>
+
+    <script>
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
+            e.preventDefault(); // Impede o envio do formulário
+
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            try {
+                // Carrega os dados do arquivo JSON
+                const response = await fetch('acesso.json');
+                if (!response.ok) throw new Error('Erro ao carregar o arquivo de acesso.');
+
+                const usuarios = await response.json();
+
+                // Oculta mensagens de erro anteriores
+                document.getElementById('loginError').style.display = 'none';
+                document.getElementById('paymentError').style.display = 'none';
+
+                // Verifica o usuário e senha
+                const user = usuarios.find(u => u.username === username && u.password === password);
+                if (user) {
+                    if (user.statusPagamento === "pendente") {
+                        document.getElementById('paymentError').style.display = 'block';
+                    } else {
+                        // Salva o usuário logado no localStorage
+                        localStorage.setItem('loggedUser', JSON.stringify(user));
+
+                        // Envia uma requisição para iniciar o Venom no servidor
+                        const loginResponse = await fetch('/start-venom', { method: 'POST' });
+
+                        if (loginResponse.ok) {
+                            alert("Login bem-sucedido! O Venom está sendo iniciado...");
+                            window.location.href = "index1.html";  // Redireciona para o dashboard
+                        } else {
+                            alert("Erro ao iniciar o Venom. Tente novamente.");
+                        }
+                    }
+                } else {
+                    document.getElementById('loginError').style.display = 'block';
+                }
+            } catch (error) {
+                console.error('Erro ao processar login:', error);
+                alert('Erro interno. Tente novamente mais tarde.');
+            }
+        });
+    </script>
+</body>
+</html>

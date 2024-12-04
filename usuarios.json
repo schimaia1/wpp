@@ -1,0 +1,5 @@
+[
+    { "username": "user1", "statusPagamento": "ok" },
+    { "username": "user2", "statusPagamento": "pendente" },
+    { "username": "user3", "statusPagamento": "pendente" }
+]
